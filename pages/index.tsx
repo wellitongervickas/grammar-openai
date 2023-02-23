@@ -1,11 +1,63 @@
-import Head from 'next/head'
-import Image from 'next/image'
-import { Inter } from '@next/font/google'
-import styles from '@/styles/Home.module.css'
+import Head from "next/head";
+import SpeechRecognition, {
+  useSpeechRecognition,
+} from "react-speech-recognition";
+import { Configuration, OpenAIApi } from "openai";
+import { useEffect, useState } from "react";
 
-const inter = Inter({ subsets: ['latin'] })
+const getDavinciResponse = async (clientText: string) => {
+  const configuration = new Configuration({
+    organization: process.env.NEXT_PUBLIC_OPENAI_ORGANIZATION_ID,
+    apiKey: process.env.NEXT_PUBLIC_OPENAI_KEY,
+  });
+
+  const openai = new OpenAIApi(configuration);
+  const options = {
+    model: "text-davinci-003",
+    prompt: `From the following sentence, fix grammatical errors and return the new fixed sentence.\nSentence: ${clientText}?`,
+    temperature: 0,
+    max_tokens: 60,
+    top_p: 1,
+    frequency_penalty: 0.5,
+    presence_penalty: 0,
+  };
+
+  const response = await openai.createCompletion(options);
+  let botResponse = "";
+  response.data.choices.forEach(({ text }) => {
+    botResponse += text;
+  });
+
+  return botResponse;
+};
 
 export default function Home() {
+  const [correct, setCorrect] = useState("");
+  const { transcript, finalTranscript, listening, resetTranscript } =
+    useSpeechRecognition();
+
+  const handleSpeak = () => {
+    const synth = globalThis.speechSynthesis;
+    if (synth) {
+      const utterThis = new SpeechSynthesisUtterance(correct);
+      utterThis.rate = 0.7;
+      utterThis.pitch = 1;
+      synth.speak(utterThis);
+    }
+  };
+
+  useEffect(() => {
+    if (!transcript.length) {
+      setCorrect("");
+    }
+  }, [transcript]);
+
+  useEffect(() => {
+    if (listening) return;
+    if (!finalTranscript.length) return;
+    getDavinciResponse(finalTranscript).then(setCorrect);
+  }, [finalTranscript, listening]);
+
   return (
     <>
       <Head>
@@ -14,110 +66,24 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      <main className={styles.main}>
-        <div className={styles.description}>
-          <p>
-            Get started by editing&nbsp;
-            <code className={styles.code}>pages/index.tsx</code>
-          </p>
-          <div>
-            <a
-              href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              By{' '}
-              <Image
-                src="/vercel.svg"
-                alt="Vercel Logo"
-                className={styles.vercelLogo}
-                width={100}
-                height={24}
-                priority
-              />
-            </a>
-          </div>
-        </div>
-
-        <div className={styles.center}>
-          <Image
-            className={styles.logo}
-            src="/next.svg"
-            alt="Next.js Logo"
-            width={180}
-            height={37}
-            priority
-          />
-          <div className={styles.thirteen}>
-            <Image
-              src="/thirteen.svg"
-              alt="13"
-              width={40}
-              height={31}
-              priority
-            />
-          </div>
-        </div>
-
-        <div className={styles.grid}>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Docs <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Find in-depth information about Next.js features and&nbsp;API.
-            </p>
-          </a>
-
-          <a
-            href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Learn <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Learn about Next.js in an interactive course with&nbsp;quizzes!
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Templates <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Discover and deploy boilerplate example Next.js&nbsp;projects.
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Deploy <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Instantly deploy your Next.js site to a shareable URL
-              with&nbsp;Vercel.
-            </p>
-          </a>
-        </div>
+      <main>
+        <h1>Spoken Correction</h1>
+        <p>eg: there&apos;s something new?</p>
+        <p>Microphone: {listening ? "on" : "off"}</p>
+        <button onClick={SpeechRecognition.startListening as any}>Start</button>
+        <button onClick={SpeechRecognition.stopListening}>Stop</button>
+        <button onClick={resetTranscript}>Reset</button>
+        <p>{transcript}</p>
+        {correct && (
+          <>
+            <p>Correction:</p>
+            <p>{correct}</p>
+            <div>
+              <button onClick={handleSpeak}>speak</button>
+            </div>
+          </>
+        )}
       </main>
     </>
-  )
+  );
 }
